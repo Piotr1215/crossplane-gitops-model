@@ -174,7 +174,6 @@ when someone asks for EC2 claim.
 
 Source: Author based on Crossplane.io- switch to the directory where repository was cloned and execute below commands
 
-Before proceeding to the next section, let's take a step back and make sure we understand what all this forking and cloning was about!
 
 ### Add Source
 
@@ -228,18 +227,27 @@ Before proceeding to the next section, let's take a step back and make sure we u
 
 ![new-instance-sync](_media/new-instance-sync.png)
 
-### Cleanup forked repository
+Let's take a step back and make sure we understand all the resources and repositories used.
 
-- to cleanup the EC2 Instance and underlying infrastructure, remove the Crossplane.yaml demo from the crossplane-ec2 repository
+![repos](diagrams/rendered/gitops-repos.png)
+
+The first repository we have created is what Flux uses to manage itself on the cluster as well as other repositories.
+In order to tell Flux about a repositry with Crossplane EC2 claims, we have created a `GitSource` YAMl file that points to HTTPS address of the repository with the EC2 claims.
+
+The EC2 claims repository contains a folder where plain Kubernetes manifest files are located. In order to tell Flux what files to observe, we have created a `Kustomization` and linked it with `GitSource` via its name. `Kustomization` points to the folder containing K8s manifests.
+
+### Cleanup
+
+- to cleanup the EC2 Instance and underlying infrastructure, remove the claim-aws.yaml demo from the crossplane-ec2 repository
   - `rm ec2-claim/claim-aws.yaml`
   - `git add .`
   - `git commit -m "EC2 instance removed"`
 - remember that we have set up 1 minute pull intervals, so after 1 minute Flux will synchronize and Crossplane will pick up removed artefact
    > the ec2-claim folder must be present in the repo after the claim yaml is removed, otherwise Flux cannot reconcile
 
-### Cleanup original repository
+### Manual Cleanup
 
-> If you are curious see what will happen if you delete the VirtualMachineInstance resource from the cluster without suspending the Flux reconciliation loop
+> In case you cannot use the repository, it's possible to cleanup the resources by deleting them from flux.
 
 - deleting Flux kustomization `flux delete kustomization crossplane-demo` will remove all the resources from the cluster and AWS
 - to cleanup the EC2 Instance and underlying infrastructure, remove the ec2 claim form the cluster `kubectl delete VirtualMachineInstance sample-ec2`
