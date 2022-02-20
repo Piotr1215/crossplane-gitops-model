@@ -6,7 +6,7 @@ hide footbox
 autonumber
 
 skinparam DefaultFontSize 16
-
+skinparam BackgroundColor white
 'scale 1024 width
 'scale 768 height
 
