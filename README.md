@@ -1,29 +1,41 @@
 # GitOpsify Cloud Infrastructure with Crossplane and Flux
 
 In this article we are going to learn how to automate the provisioning of cloud resources via Crossplane and combine it with GitOps practices.
-We are going to use Flux as a GitOps engine, but the same could be achieved with ArgoCD or Rancher Fleet.
+
+You will most benefit from this blog if you are a Platform or DevOps Engineer, Infrastructure Architect or Operations Specialist.
+
+> If you are new to GitOps, read more about it in my blog [GitOps with Kubernetes](https://itnext.io/gitops-with-kubernetes-740f37ea015b)
 
 Let's set the stage by imagining following context. We are working as a part of a Platform Team in a large organization. Our goal is to help Development Teams to onboard get up to speed with using our Cloud Infrastructure. Here are a few base requirements:
 
-- Platform Team doesn't have resources to deal with ever request individually, so there must be a very high degree of **automation**
-- Company policy is to adopt the **principle of least privilege**. We should expose the cloud resources following this rule.
-- Developers are not interested in managing cloud, they should only **consume cloud resources** without even needing to login to cloud console.
+- Platform Team doesn't have resources to deal with every request individually, so there must be a very high degree of **automation**
+- Company policy is to adopt the **principle of least privilege**. We should expose the cloud resources only when needed with the lowest permissions necessary.
+- Developers are not interested in managing cloud, they should only **consume cloud resources** without even needing to login to a cloud console.
 - New Teams should get **their own** set of cloud resources when on-boarding to the Platform.
 - It should be **easy** to provision new cloud resources on demand.
 
-> Read more about GitOps [in my blog](https://itnext.io/gitops-with-kubernetes-740f37ea015b)
-
 ## Initial Architecture
 
-The requirements lead us to an initial architecture proposal
+The requirements lead us to an initial architecture proposal with following high level solution strategy.
 
-- create template repositories for various types of workloads (using Backstage would be helpful)
-- once any Team wants to create for example VM based workload, we can place the Crossplane claim YAMLs in the template
-- whenever the Team is ready to deploy their infrastructure, we can add there repo to the Flux infra repository and infrastructure will be automatically reconciled
+- create template repositories for various types of workloads (using [Backstage Software Templates](https://backstage.io/docs/features/software-templates/software-templates-index) would be helpful)
+- once a new Team is onboarded and creates first repository from a template, it will trigger a CI pipeline and deploy common infrastructure components by adding the repository as Source to Flux infrastructure repo
+- once a Team wants to create more cloud infrastructure, they can place the Crossplane claim YAMLs in the designated folder in their repository
+- adjustments to this process are easily implemented using Crossplane Compositions
+
+> In real world scenario we would manage Crossplane also using Flux, but for demo purposes we are focusing only on the application level.
 
 The developer experience should be similar to this:
 
 ![TeamBootstrap](diagrams/rendered/git-workflow.png)
+
+## Tools and Implementaiton
+
+Knowing the requirements and initial architecture, we can start selecting the tools. For our example, the tools we will use are [Flux](https://fluxcd.io/) and [Crossplane](https://crossplane.io/).
+
+> We are going to use Flux as a GitOps engine, but the same could be achieved with ArgoCD or Rancher Fleet.
+
+Let's look at the architecture and usecases that both tools support.
 
 ### Flux Architecture Overview
 
@@ -108,24 +120,44 @@ Let’s look how the Crossplane component model looks like. A word of warning, i
 ![Crossplane-architecture](_media/crossplane-architecture.png)
 Source: Author based on Crossplane.io
 
+> Learn more about Crossplane in my blog "[Infrastructure as Code: the next big shift is here](https://itnext.io/infrastructure-as-code-the-next-big-shift-is-here-9215f0bda7ce)"
+
 ## Demo
+
+If you want to follow along with the demo, clone [this repository](https://github.com/Piotr1215/crossplane-gitops-model), it contains all the scripts to run the demo code.
 
 ### Prerequisites
 
-There are several prerequisites for the demo.
+In this demo, we are going to show how to use Flux and Crossplane to provision an EC2 instance directly from a new GitHub repository.
+This simulates a new team onboarding to our Platform.
 
-Those will be installed automatically and configured by the Makefile script:
+To follow along, you will need AWS CLI configured on your local machine.
 
-- KIND
-- Flux CLI
-- Crossplane CLI
-- Kubernetes cluster with KIND
-- Flux, Crossplane and AWS Provider installed and configured on the cluster
+> Once you obtain credentials, configure default profile for AWS CLI following [this tutorial](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-config).
+
+Locally installed you will need:
+
+- Docker Desktop or other container run time
+- WSL2 if using Windows
+- kubectl
+
+Run `make` in the root folder of the project, this will:
+
+> If you are running on on Mac, use `make setup_mac` instead of `make`.
+
+- Install [kind](https://kind.sigs.k8s.io/) (Kubernetes IN Docker) if not already installed
+- Create kind cluster called crossplane-cluster and swap context to it
+- Install crossplane using helm
+- Install crossplane CLI if not already installed
+- Install flux CLI if not already installed
+- Install AWS provider on the cluster
+- Create a temporary file with AWS credentials based on default CLI profile
+- Create a secret with AWS credentials in crossplane-system namespace
+- Configure AWS provider to use the secret for provisioning the infrastructure
+- Remove the temporary file with credentials so it's not accidentally checked in the repository
 
 Following tools need to be installed manually
 
-- AWS CLI
-- kubectl
 - [GitHub CLI gh](https://github.com/cli/cli#installation)
 
 > IMPORTANT: The demo code will create a small EC2 Instance in eu-centra-1 region. The instance and underlying infrastructure will be removed as part of the demo, but please make sure all the resources were successfully removed and in case of any disruptions in the demo flow, be ready to remove the resources manually.
@@ -158,11 +190,9 @@ Now we will install a [Crossplane Composition](https://Crossplane.io/docs/v1.6/c
 when someone asks for EC2 claim.
 
 - setup Crossplane composition and definition for creating EC2 instances
-  - `kubectl Crossplane install piotrzan/crossplane-ec2-instance:v1`
+  - `kubectl crossplane install configuration piotrzan/crossplane-ec2-instance:v1`
 
 - fork repository with the EC2 claims `gh repo fork https://github.com/Piotr1215/crossplane-ec2` and answer <kbd>YES</kbd> when prompted whether to clone the repository
-
-> Learn more about Crossplane in my blog "[Infrastructure as Code: the next big shift is here](https://itnext.io/infrastructure-as-code-the-next-big-shift-is-here-9215f0bda7ce)"
 
 ### Clone Flux Infra Repository
 
@@ -172,16 +202,10 @@ when someone asks for EC2 claim.
 
   `cd flux-infra`
 
-Source: Author based on Crossplane.io- switch to the directory where repository was cloned and execute below commands
-
-
 ### Add Source
 
 - add source repository to tell Flux what to observe and synchronize
-    > We are adding here my public GitHub repository to keep things simple.
     > Flux will register this repository and every 30 seconds check for changes.
-
-- optionally clone if you have forked the repository `git clone https://github.com/Piotr1215/crossplane-ec2.git`
 
 - execute below command in the flux-infra repository, it will add a Git Source
 
@@ -200,11 +224,9 @@ Source: Author based on Crossplane.io- switch to the directory where repository 
 
 - execute `kubectl get gitrepositories.source.toolkit.fluxcd.io -A` to see active Git Repositories sources in Flux
 
-    ![Git-Repositories-flux](_media/GitRepositories-flux.png)
-
 ### Create Flux Kustomization
 
-- setup watch on the AWS managed resources, for not there should be none
+- setup watch on the AWS managed resources, for now there should be none
 
   `watch kubectl get managed`
 - create Flux Kustomization to watch for specific folder in the repository with the Crossplane EC2 claim
@@ -242,7 +264,7 @@ The EC2 claims repository contains a folder where plain Kubernetes manifest file
   - `rm ec2-claim/claim-aws.yaml`
   - `git add .`
   - `git commit -m "EC2 instance removed"`
-- remember that we have set up 1 minute pull intervals, so after 1 minute Flux will synchronize and Crossplane will pick up removed artefact
+- after a commit or timer lapse Flux will synchronize and Crossplane will pick up removed artefact and delete cloud resources
    > the ec2-claim folder must be present in the repo after the claim yaml is removed, otherwise Flux cannot reconcile
 
 ### Manual Cleanup
