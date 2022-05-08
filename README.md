@@ -191,7 +191,9 @@ Now we will install a [Crossplane Composition](https://Crossplane.io/docs/v1.6/c
 - setup Crossplane composition and definition for creating EC2 instances
   - `kubectl crossplane install configuration piotrzan/crossplane-ec2-instance:v1`
 
-- fork repository with the EC2 claims `gh repo fork https://github.com/Piotr1215/crossplane-ec2` and answer <kbd>YES</kbd> when prompted whether to clone the repository
+- fork repository with the EC2 claims 
+  - `gh repo fork https://github.com/Piotr1215/crossplane-ec2` 
+    > answer <kbd>YES</kbd> when prompted whether to clone the repository
 
 ### Clone Flux Infra Repository
 
